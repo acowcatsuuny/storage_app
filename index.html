@@ -2,11 +2,11 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#355947">
-<title>日日庫存 · 第二組 MVP v1.7</title>
+<title>日日庫存 · 第二組 MVP</title>
 <link rel="stylesheet" href="assets/styles.css">
 </head>
 <body><div class="layout"><div class="phone">
-<header class="top"><div class="topline"><div class="brand">✦ 日日庫存 <span style="font-weight:400;font-size:11px">Daily Pantry</span></div><div class="version">第二組 · MVP v1.7</div></div><h1 id="pageTitle">重要物品</h1><p id="pageSubtitle">常用與即將需要補貨的物品，一眼掌握。</p><div class="summary"><button class="counter" type="button" data-view="inventory" aria-label="查看全部庫存"><strong id="totalCount">0</strong><span>庫存品項</span></button><button class="counter danger" type="button" data-view="shop" aria-label="查看需要補貨的購物清單"><strong id="lowCount">0</strong><span>需要補貨</span></button><button class="counter" type="button" data-action="soon" aria-label="查看到期提醒物品"><strong id="soonCount">0</strong><span>到期提醒</span></button></div></header>
+<header class="top"><div class="topline"><div class="brand">✦ 日日庫存 <span style="font-weight:400;font-size:11px">Daily Pantry</span></div><div class="version">第二組 · MVP <span id="appVersion">v1.8.0</span></div></div><h1 id="pageTitle">重要物品</h1><p id="pageSubtitle">常用與即將需要補貨的物品，一眼掌握。</p><div class="summary"><button class="counter" type="button" data-view="inventory" aria-label="查看全部庫存"><strong id="totalCount">0</strong><span>庫存品項</span></button><button class="counter danger" type="button" data-view="shop" aria-label="查看需要補貨的購物清單"><strong id="lowCount">0</strong><span>需要補貨</span></button><button class="counter" type="button" data-action="soon" aria-label="查看到期提醒物品"><strong id="soonCount">0</strong><span>到期提醒</span></button></div></header>
 <main class="main">
 <section class="screen show" id="homeScreen"><div class="section-heading"><h2>重要物品</h2></div><div id="favoriteItems"></div><div class="banner green">★ 點星號可將物品加入或移出重要清單。點「物品資訊」可查看數量、期限、位置並更新資料。 <button class="small-btn" data-view="backup">資料備份 ↗</button></div></section>
 <section class="screen" id="inventoryScreen"><div class="section-heading"><h2>庫存清單</h2></div><input class="search" id="searchInput" type="search" placeholder="搜尋名稱、位置、條碼…" aria-label="搜尋庫存"><div class="category-row" id="categoryFilters"></div><div class="location-filter"><label for="locationFilter">📍 收納位置篩選</label><select id="locationFilter" aria-label="依收納位置篩選"></select></div><div id="statusFilterBadge"></div><div id="inventoryItems"></div><button class="action btn-wide" data-view="add">＋ 新增庫存物品</button></section>
