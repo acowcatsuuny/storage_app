@@ -1,7 +1,6 @@
 (()=>{'use strict';
 const KEY='daily_pantry_wireframe_v1';const SHOP_KEY='daily_pantry_manual_shop_v1';const CAT_KEY='daily_pantry_custom_categories_v1';const LOC_KEY='daily_pantry_custom_locations_v1';const BASE_LOCATIONS=['浴室','廚房','冰箱','冷凍庫','客廳','臥室','書桌','儲物櫃','玄關'];const PEN_FIX_KEY='daily_pantry_pen_emoji_fix_v15';const BASE_CATEGORIES=['個人護理','食品飲料','清潔用品','文具用品','其他'];const $=id=>document.getElementById(id);const safe=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));const two=n=>String(n).padStart(2,'0');const shifted=d=>{const x=new Date();x.setDate(x.getDate()+d);return `${x.getFullYear()}-${two(x.getMonth()+1)}-${two(x.getDate())}`};
-const APP_VERSION=$('appVersion').textContent.trim();
-document.title='日日庫存 · 第二組 MVP '+APP_VERSION;
+const APP_VERSION=document.documentElement.dataset.appVersion;
 const EMOJI_OPTIONS=['📦','🧻','🪥','🧴','🧼','🧽','🧹','🧺','🧦','👕','👟','🛁','🥛','🍞','🍎','🍌','🥚','🍚','🍜','🥫','☕','💊','🩹','🖊️','🖋️','✏️','📚','🔋','💡','🐱','🐶','🦖'];
 const EMOJI_BY_CATEGORY={'個人護理':'🧴','食品飲料':'🥛','清潔用品':'🧽','文具用品':'✏️','其他':'📦'};
 const EMOJI_BY_ITEM=[['衛生紙','🧻'],['面紙','🧻'],['擦手紙','🧻'],['紙巾','🧻'],['牙刷','🪥'],['牙膏','🪥'],['洗面乳','🧴'],['洗髮','🧴'],['沐浴乳','🧴'],['肥皂','🧼'],['海綿','🧽'],['菜瓜布','🧽'],['牛奶','🥛'],['吐司','🍞'],['麵包','🍞'],['原子筆','🖊️'],['鋼珠筆','🖊️'],['中性筆','🖊️'],['簽字筆','🖊️'],['鋼筆','🖋️'],['鉛筆','✏️']];
