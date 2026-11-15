@@ -121,13 +121,65 @@ function shopRow(name, auto, id, url, quantity, reason) {
     ${auto?'':`<button class="small-btn alert" data-action="shop-remove" data-id="${safe(id)}">移除</button>`}
   </div>`;
 }
-function detail(i){const st=status(i);$('detailContent').innerHTML=`<div class="detail"><div class="tiny">${safe(i.category)} · ${safe(i.location||'未設定位置')}</div><div class="big-name">${emojiHtml(i)}${safe(i.name)}</div><div style="margin-top:7px"><span class="status ${st[1]}">${st[0]}</span></div><div class="detail-data"><div><div class="label">到期日期</div><div class="value">${safe(i.expiry||'未設定')}</div></div><div><div class="label">商品價格</div><div class="value">${i.price!==''&&i.price!=null?'NT$ '+Number(i.price):'未設定'}</div></div><div><div class="label">目標存量</div><div class="value">${Number(i.target)}</div></div><div><div class="label">商品條碼</div><div class="value" style="font-size:12px;word-break:break-word">${safe(i.barcode||'未設定')}</div></div></div>${i.photo?`<img src="${safe(i.photo.startsWith('data:image/jpeg;base64,')?i.photo:'')}" alt="${safe(i.name)} 的照片" style="max-width:100%;max-height:180px;object-fit:cover;border-radius:10px;margin-top:14px">`:''}</div><div class="detail-qty"><div><strong>目前庫存</strong><div class="tiny">點選－或＋更新數量</div></div><div class="qty-controls"><button data-action="minus" data-id="${safe(i.id)}" ${Number(i.qty)<=0?'disabled':''}>−</button><span>${i.qty}</span><button data-action="plus" data-id="${safe(i.id)}">＋</button></div></div><div class="tiny" style="margin:0 0 8px;font-weight:750">物品管理</div><div class="stack"><button class="action solid" data-action="edit" data-id="${safe(i.id)}">✎ 編輯物品資訊</button><button class="action" data-action="shop-item" data-id="${safe(i.id)}">加入購物清單</button></div><div class="stack" style="margin-top:9px"><button class="action line" data-action="favorite" data-id="${safe(i.id)}">${i.favorite?'★ 取消重要標記':'☆ 標記重要'}</button><button class="action danger" data-action="delete" data-id="${safe(i.id)}">🗑 刪除物品</button></div><div class="notice">刪除功能位於「物品資訊」，點選後會再次要求確認，避免誤刪。</div>`}
+const HISTORY_LABELS = { use: '使用', restock: '補貨', replace: '補貨（取代過期庫存）', adjust: '庫存校正' };
+const historyTime = new Intl.DateTimeFormat('zh-TW', { dateStyle: 'medium', timeStyle: 'short' });
+
+function recordQuantity(item, type, before, quantity = Math.abs(item.qty - before)) {
+  if (!Array.isArray(item.history)) item.history = [];
+  item.history.push({ type, at: Date.now(), quantity, before, after: item.qty });
+}
+
+function inventoryHistory(item) {
+  const now = Date.now();
+  const records = (Array.isArray(item.history) ? item.history : [])
+    .filter(entry => entry && Object.hasOwn(HISTORY_LABELS, entry.type) &&
+      Number.isFinite(entry.at) && entry.at >= 0 && entry.at <= now &&
+      Number.isFinite(entry.quantity) && entry.quantity > 0 &&
+      Number.isFinite(entry.before) && Number.isFinite(entry.after))
+    .reverse()
+    .sort((a, b) => b.at - a.at);
+  const lastRestock = records.find(entry => entry.type === 'restock' || entry.type === 'replace');
+
+  const day = 86_400_000;
+  const recent = records.filter(entry => entry.at > now - 30 * day);
+  const used = recent.reduce((total, entry) => total + (entry.type === 'use' ? entry.quantity : 0), 0);
+  const historyDays = records.length ? Math.ceil((now - records.at(-1).at) / day) : 0;
+  const observedDays = Math.min(30, Math.max(1, historyDays));
+  const rate = used ? (used / observedDays).toLocaleString('zh-TW', { maximumFractionDigits: 2 }) : '';
+  const usage = rate ? `每日約 ${rate} 件（觀察 ${observedDays} 天）` : '近 30 天尚無使用紀錄';
+
+  return `<section class="detail inventory-history" aria-labelledby="historyHeading">
+    <h3 id="historyHeading">使用與進貨紀錄</h3>
+    <dl>
+      <div><dt>上次補貨</dt><dd>${lastRestock ? historyTime.format(lastRestock.at) : '尚無補貨紀錄'}</dd></div>
+      <div><dt>消耗速度</dt><dd>${usage}</dd></div>
+    </dl>
+    ${records.length ? `<details><summary>查看歷程（${records.length} 筆）</summary><ul>
+      ${records.map(entry => `<li>
+        <strong>${HISTORY_LABELS[entry.type]} ${entry.quantity} 件</strong>
+        <span class="tiny">${historyTime.format(entry.at)} · 庫存 ${entry.before} → ${entry.after}</span>
+      </li>`).join('')}
+    </ul></details>` : '<p class="tiny">尚無庫存紀錄。使用 − 會記錄消耗，使用 ＋ 或完成補貨會記錄進貨。</p>'}
+  </section>`;
+}
+
+function detail(i){const st=status(i);$('detailContent').innerHTML=`<div class="detail"><div class="tiny">${safe(i.category)} · ${safe(i.location||'未設定位置')}</div><div class="big-name">${emojiHtml(i)}${safe(i.name)}</div><div style="margin-top:7px"><span class="status ${st[1]}">${st[0]}</span></div><div class="detail-data"><div><div class="label">到期日期</div><div class="value">${safe(i.expiry||'未設定')}</div></div><div><div class="label">商品價格</div><div class="value">${i.price!==''&&i.price!=null?'NT$ '+Number(i.price):'未設定'}</div></div><div><div class="label">目標存量</div><div class="value">${Number(i.target)}</div></div><div><div class="label">商品條碼</div><div class="value" style="font-size:12px;word-break:break-word">${safe(i.barcode||'未設定')}</div></div></div>${i.photo?`<img src="${safe(i.photo.startsWith('data:image/jpeg;base64,')?i.photo:'')}" alt="${safe(i.name)} 的照片" style="max-width:100%;max-height:180px;object-fit:cover;border-radius:10px;margin-top:14px">`:''}</div><div class="detail-qty"><div><strong>目前庫存</strong><div class="tiny">點選－或＋更新數量</div></div><div class="qty-controls"><button data-action="minus" data-id="${safe(i.id)}" ${Number(i.qty)<=0?'disabled':''}>−</button><span>${i.qty}</span><button data-action="plus" data-id="${safe(i.id)}">＋</button></div></div><div class="tiny" style="margin:0 0 8px;font-weight:750">物品管理</div><div class="stack"><button class="action solid" data-action="edit" data-id="${safe(i.id)}">✎ 編輯物品資訊</button><button class="action" data-action="shop-item" data-id="${safe(i.id)}">加入購物清單</button></div><div class="stack" style="margin-top:9px"><button class="action line" data-action="favorite" data-id="${safe(i.id)}">${i.favorite?'★ 取消重要標記':'☆ 標記重要'}</button><button class="action danger" data-action="delete" data-id="${safe(i.id)}">🗑 刪除物品</button></div>${inventoryHistory(i)}`}
 function resetForm(){ updateCategorySelect();updateLocationSelect();$('itemForm').reset();emojiTouched=false;setEmoji(defaultEmoji($('itemCategory').value,''));$('itemQty').value=1;$('itemTarget').value=2;$('itemFavorite').checked=true;formPhoto='';$('photoStatus').textContent='圖片會縮小後儲存在目前瀏覽器；可選擇不拍攝。';$('receiptStatus').textContent='可附上發票照片作參考；目前不支援自動 OCR 擷取品名。';$('formHeading').textContent='新增物品'; }
 function edit(id){const i=get(id);if(!i)return;page='add';nav('add');editId=i.id;const fields={itemName:i.name,itemQty:i.qty,itemTarget:i.target,itemCategory:i.category,itemLocation:i.location,itemExpiry:i.expiry,itemPrice:i.price,itemBarcode:i.barcode,itemShopUrl:i.url};Object.entries(fields).forEach(([key,v])=>$(key).value=v??'');$('itemFavorite').checked=!!i.favorite;setEmoji(emojiOf(i));emojiTouched=true;updateCategorySelect(i.category);updateLocationSelect(i.location);formPhoto=i.photo||'';$('formHeading').textContent='編輯物品';$('pageTitle').textContent='編輯物品'}
 function dialog(title,html,buttons){$('modalTitle').textContent=title;$('modalBody').innerHTML=html;$('modalActions').innerHTML='';buttons.forEach(b=>{const el=document.createElement('button');el.className='action '+(b.className||'');el.textContent=b.label;el.onclick=b.onClick;$('modalActions').append(el)});$('modalShade').classList.remove('hidden')}
 function closeDialog(){stopScanner();$('modalShade').classList.add('hidden')}
 function remove(id){const i=get(id);if(!i)return;dialog('刪除物品',`<p>確定刪除「${safe(i.name)}」？刪除後無法復原。</p>`,[{label:'取消',onClick:closeDialog},{label:'確認刪除',className:'danger',onClick:()=>{stock=stock.filter(x=>x.id!==id);closeDialog();save();nav('inventory');notify('已刪除物品')}}])}
-function change(id,diff){const i=get(id);if(!i)return;i.qty=Math.max(0,Number(i.qty)+diff);save();notify(`${i.name}：目前數量 ${i.qty}`)}
+function change(id, diff) {
+  const item = get(id);
+  if (!item) return;
+  const before = Number(item.qty);
+  const after = Math.max(0, before + diff);
+  if (after === before) return;
+  item.qty = after;
+  recordQuantity(item, diff < 0 ? 'use' : 'restock', before);
+  save();
+  notify(`${item.name}：目前數量 ${item.qty}`);
+}
 function addShopping(i){if(!shopping.some(s=>s.name===i.name)&&!needsRestock(i)){shopping.push({id:'s'+Date.now()+Math.random().toString(36).slice(2),name:i.name})}save();notify('已加入購物清單');nav('shop')}
 function addManualShop(){const name=$('shopInput').value.trim();if(!name)return notify('請輸入購物項目');if(shopping.some(i=>i.name===name)||stock.some(i=>i.name===name&&needsRestock(i)))return notify('此項目已在購物清單');shopping.push({id:'s'+Date.now()+Math.random().toString(36).slice(2),name});$('shopInput').value='';save();notify('已加入購物清單')}
 function completeRestock(item) {
@@ -157,7 +209,9 @@ function completeRestock(item) {
         }
         item.expiry = expiry;
       }
-      item.qty = replaceExpired ? quantity : Number(item.qty) + quantity;
+      const before = Number(item.qty);
+      item.qty = replaceExpired ? quantity : before + quantity;
+      recordQuantity(item, replaceExpired ? 'replace' : 'restock', before, quantity);
       closeDialog();
       save();
       notify('已更新庫存');
@@ -179,7 +233,14 @@ $('emojiClear').addEventListener('click',()=>{emojiTouched=true;setEmoji('')});
 syncEmoji();
 $('itemPhoto').addEventListener('change',e=>{const f=e.target.files?.[0];if(!f)return;const img=new Image(),url=URL.createObjectURL(f);img.onload=()=>{const c=document.createElement('canvas');const s=Math.min(1,700/Math.max(img.width,img.height));c.width=Math.round(img.width*s);c.height=Math.round(img.height*s);c.getContext('2d').drawImage(img,0,0,c.width,c.height);formPhoto=c.toDataURL('image/jpeg',.64);URL.revokeObjectURL(url);$('photoStatus').textContent=`已選取 ${f.name}，照片將隨庫存記錄儲存。`};img.onerror=()=>{$('photoStatus').textContent='無法讀取圖片，請換一張試試';URL.revokeObjectURL(url)};img.src=url});
 $('itemReceipt').addEventListener('change',e=>{const f=e.target.files?.[0];$('receiptStatus').textContent=f?`已選取「${f.name}」。MVP 目前不會自動辨識發票，也不會保存發票照片。`:'可附上發票照片作參考；目前不支援自動 OCR 擷取品名。'});
-$('itemForm').addEventListener('submit',e=>{e.preventDefault();const name=$('itemName').value.trim(),qty=Number($('itemQty').value),target=Number($('itemTarget').value);if(!name||!Number.isSafeInteger(qty)||qty<0||!Number.isSafeInteger(target)||target<0){notify('請填寫有效名稱與整數數量');return}const i={id:editId||'i'+Date.now()+Math.random().toString(36).slice(2),name,emoji:$('itemEmoji').value.trim(),qty,target,category:$('itemCategory').value,location:$('itemLocation').value.trim(),expiry:$('itemExpiry').value,price:$('itemPrice').value.trim(),barcode:$('itemBarcode').value.trim(),url:$('itemShopUrl').value.trim(),favorite:$('itemFavorite').checked,photo:formPhoto};if(editId){stock=stock.map(x=>x.id===editId?i:x)}else{stock.unshift(i)}save();editId=null;resetForm();nav('inventory');notify('物品已儲存')});
+$('itemForm').addEventListener('submit',e=>{e.preventDefault();const name=$('itemName').value.trim(),qty=Number($('itemQty').value),target=Number($('itemTarget').value);if(!name||!Number.isSafeInteger(qty)||qty<0||!Number.isSafeInteger(target)||target<0){notify('請填寫有效名稱與整數數量');return}const i={id:editId||'i'+Date.now()+Math.random().toString(36).slice(2),name,emoji:$('itemEmoji').value.trim(),qty,target,category:$('itemCategory').value,location:$('itemLocation').value.trim(),expiry:$('itemExpiry').value,price:$('itemPrice').value.trim(),barcode:$('itemBarcode').value.trim(),url:$('itemShopUrl').value.trim(),favorite:$('itemFavorite').checked,photo:formPhoto};if (editId) {
+  const previous = get(editId);
+  if (Array.isArray(previous?.history)) i.history = previous.history;
+  if (previous && Number(previous.qty) !== qty) recordQuantity(i, 'adjust', Number(previous.qty));
+  stock = stock.map(item => item.id === editId ? i : item);
+} else {
+  stock.unshift(i);
+}save();editId=null;resetForm();nav('inventory');notify('物品已儲存')});
 $('backFromDetail').addEventListener('click',()=>nav(detailReturnPage));
 $('backFromShop').addEventListener('click',()=>{const destination=['home','inventory','detail','backup'].includes(lastPage)?lastPage:'home';nav(destination)});
 $('searchInput').addEventListener('input',render);$('shopInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addManualShop()}});$('addShop').addEventListener('click',addManualShop);$('shareShop').addEventListener('click',sendShop);$('scanBarcode').addEventListener('click',scan);$('exportData').addEventListener('click',exportData);$('importButton').addEventListener('click',()=>$('importFile').click());

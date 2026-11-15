@@ -30,3 +30,41 @@
 .shopping-row .small-btn {
   flex-shrink: 0;
 }
+
+.inventory-history {
+  margin-top: 14px;
+}
+.inventory-history h3,
+.inventory-history p {
+  margin: 0;
+}
+.inventory-history dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+.inventory-history dt {
+  font-size: 12px;
+  color: var(--muted);
+}
+.inventory-history dd {
+  margin: 4px 0 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.inventory-history summary {
+  cursor: pointer;
+  padding-block: 8px;
+}
+.inventory-history ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.inventory-history li {
+  display: grid;
+  gap: 4px;
+  padding-block: 8px;
+  border-top: 1px solid var(--line);
+}
