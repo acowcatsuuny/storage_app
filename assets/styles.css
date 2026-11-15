@@ -5,3 +5,28 @@
 
 /* 使用者測試：底部購物清單、可點選統計與用完狀態。 */
 .nav{grid-template-columns:repeat(4,minmax(0,1fr))}.counter{text-align:left;min-width:0}.counter:focus-visible{outline:3px solid #97c3a6;outline-offset:2px}.status.out{background:#fdeae5;color:#ad4d39}.item.is-out{border-color:#e9b4a9}.status-filter-badge{margin:0 0 12px}.detail-heading{justify-content:flex-start}.detail-heading h2{margin-left:4px}
+
+.home-guide summary {
+  cursor: pointer;
+  font-weight: 750;
+  padding-block: 8px;
+}
+.home-guide ol {
+  margin: 4px 0 0;
+  padding-inline-start: 22px;
+}
+.home-guide li + li {
+  margin-top: 6px;
+}
+.shopping-row .fill {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.shopping-row .shop-quantity {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 750;
+}
+.shopping-row .small-btn {
+  flex-shrink: 0;
+}
