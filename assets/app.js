@@ -81,31 +81,42 @@ function notify(msg){$('toast').textContent=msg;$('toast').classList.remove('hid
 function save(){try{localStorage.setItem(KEY,JSON.stringify(stock));localStorage.setItem(SHOP_KEY,JSON.stringify(shopping));localStorage.setItem(CAT_KEY,JSON.stringify(customCategories));localStorage.setItem(LOC_KEY,JSON.stringify(customLocations))}catch{notify('儲存空間不足，請先匯出備份或移除圖片')}render()}
 function days(date){if(!date)return Infinity;const [y,m,d]=date.split('-').map(Number),t=new Date();return Math.round((new Date(y,m-1,d)-new Date(t.getFullYear(),t.getMonth(),t.getDate()))/86400000)}
 const low=i=>Number(i.qty)<=Number(i.target),near=i=>days(i.expiry)<=7;
+const expiredFood = item => item.category === '食品飲料' && days(item.expiry) < 0;
+const needsRestock = item => low(item) || expiredFood(item);
+
+function shoppingGroups() {
+  const auto = stock.filter(needsRestock);
+  const manual = shopping.filter(item => !auto.some(entry => entry.name === item.name));
+  return { auto, manual };
+}
+
 function status(i){if(Number(i.qty)===0)return ['已用完','out'];if(days(i.expiry)<0)return ['已過期','expired'];if(low(i))return ['需要補貨','low'];if(near(i))return ['即將到期','low'];return ['庫存正常','']}
 function get(id){return stock.find(i=>String(i.id)===String(id))}
 function nav(destination){if(destination==='add'){editId=null;resetForm()}if(destination==='detail'&&!get(selected)){destination='inventory'}if(destination==='shop'&&page!=='shop')lastPage=page;page=destination;if(destination==='shop'){$('backFromShop').textContent='← 返回'+({home:'首頁',inventory:'庫存清單',detail:'物品資訊',backup:'資料備份'}[lastPage]||'首頁')};document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('show',s.id===destination+'Screen'));document.querySelectorAll('[data-nav]').forEach(b=>b.classList.toggle('active',b.dataset.nav===destination));const titles={home:['重要物品','常用與即將需要補貨的物品，一眼掌握。'],inventory:['庫存清單','你擁有的日用品與剩餘數量。'],detail:['物品資訊','查看商品細節、更新數量與期限。'],add:[editId?'編輯物品':'新增物品','新增庫存資訊，從此不再忘記。'],shop:['購物清單','低庫存自動提醒，補貨更有效率。'],backup:['資料備份','保留資料，換裝置也能延續使用。']};$('pageTitle').textContent=titles[destination][0];$('pageSubtitle').textContent=titles[destination][1];render();window.scrollTo({top:0,behavior:'instant'})}
 function row(i){const st=status(i);return `<article class="item ${Number(i.qty)===0?'is-out':low(i)?'is-low':''}"><div class="item-upper"><button class="favorite ${i.favorite?'on':''}" title="${i.favorite?'取消重要物品':'標為重要物品'}" aria-label="${i.favorite?'取消重要物品':'標為重要物品'}：${safe(i.name)}" data-action="favorite" data-id="${safe(i.id)}">${i.favorite?'★':'☆'}</button><div class="item-name"><div class="item-title">${emojiHtml(i)}${safe(i.name)}</div><div class="item-sub">${safe(i.category)} · ${safe(i.location||'未設定位置')}</div></div><button class="small-btn" data-action="detail" data-id="${safe(i.id)}">物品資訊 ›</button></div><div class="item-bottom"><span class="status ${st[1]}">${st[0]}${near(i)?' · '+(days(i.expiry)<0?'過期':'剩 '+days(i.expiry)+' 天'):''}</span><div class="qty-controls"><button data-action="minus" data-id="${safe(i.id)}" aria-label="減少 ${safe(i.name)} 數量" ${Number(i.qty)<=0?'disabled':''}>−</button><span>${Number(i.qty)}</span><button data-action="plus" data-id="${safe(i.id)}" aria-label="增加 ${safe(i.name)} 數量">＋</button></div></div><div class="link-row"><button class="small-btn" data-action="shop-item" data-id="${safe(i.id)}">＋ 加入購物清單</button></div></article>`}
 function render(){
-$('totalCount').textContent=stock.length;$('lowCount').textContent=stock.filter(low).length;$('soonCount').textContent=stock.filter(near).length;
+$('totalCount').textContent=stock.length;$('lowCount').textContent=stock.filter(needsRestock).length;$('soonCount').textContent=stock.filter(near).length;
 const favorites=stock.filter(i=>i.favorite);$('favoriteItems').innerHTML=favorites.length?favorites.map(row).join(''):'<div class="empty"><div class="visual">☆</div>尚未標記重要物品。<br>到庫存清單點星號即可加入。</div>';
 updateLocationFilter();const cats=['全部',...allCategories()];$('categoryFilters').innerHTML=cats.map(c=>`<button class="chip ${c===filter?'current':''}" data-filter="${c}">${c}</button>`).join('');const q=$('searchInput').value.trim().toLowerCase();let locFilter=$('locationFilter').value;let filtered=stock.filter(i=>(filter==='全部'||i.category===filter)&&(locFilter==='全部'||(locFilter==='未設定'?!i.location:i.location===locFilter))&&(!statusFilter||(statusFilter==='expiry'&&near(i)))&&[i.name,i.location,i.barcode].join(' ').toLowerCase().includes(q));$('statusFilterBadge').innerHTML=statusFilter==='expiry'?'<button class="chip current status-filter-badge" data-action="clear-status-filter">到期提醒 ✕</button>':'';$('inventoryItems').innerHTML=filtered.length?filtered.map(row).join(''):'<div class="empty"><div class="visual">📦</div>目前沒有符合條件的物品。</div>';
 if(page==='detail'){const i=get(selected);if(i)detail(i)}
-const auto = stock.filter(low);
-const additional = shopping.filter(item => !auto.some(i => i.name === item.name));
-const autoRows = auto.map(item => shopRow(item.name, true, item.id, item.url, Number(item.qty)));
-const manualRows = additional.map(item => {
+const { auto, manual } = shoppingGroups();
+const autoRows = auto.map(item => {
+  const reason = expiredFood(item) ? '食品已過期，自動補貨' : '庫存不足，自動補貨';
+  return shopRow(item.name, true, item.id, item.url, Number(item.qty), reason);
+});
+const manualRows = manual.map(item => {
   const matches = stock.filter(i => i.name === item.name);
   const quantity = matches.length ? matches.reduce((sum, i) => sum + Number(i.qty), 0) : null;
-  return shopRow(item.name, false, item.id, '', quantity);
+  return shopRow(item.name, false, item.id, '', quantity, '手動新增項目');
 });
 $('shoppingItems').innerHTML = [...autoRows, ...manualRows].join('') || '<div class="empty"><div class="visual">🛒</div>購物清單目前是空的。</div>';
 }
-function shopRow(name, auto, id, url, quantity) {
+function shopRow(name, auto, id, url, quantity, reason) {
   const quantityLabel = quantity === null ? '尚未建立庫存' : `目前庫存：${quantity}`;
   const link=url&&/^https?:\/\//i.test(url)?url:'https://www.google.com/search?tbm=shop&q='+encodeURIComponent(name);
   return `<div class="shopping-row">
     <button style="font-size:20px" data-action="shop-done" data-id="${safe(id)}" data-auto="${auto}" aria-label="完成購買 ${safe(name)}">☐</button>
-    <div class="fill"><div class="buy-name">${safe(name)}</div><div class="detail-sub">${auto?'庫存不足，自動補貨':'手動新增項目'}</div><div class="shop-quantity">${quantityLabel}</div></div>
+    <div class="fill"><div class="buy-name">${safe(name)}</div><div class="detail-sub">${reason}</div><div class="shop-quantity">${quantityLabel}</div></div>
     <a href="${safe(link)}" target="_blank" rel="noopener noreferrer">搜尋購買 ↗</a>
     ${auto?'':`<button class="small-btn alert" data-action="shop-remove" data-id="${safe(id)}">移除</button>`}
   </div>`;
@@ -117,9 +128,44 @@ function dialog(title,html,buttons){$('modalTitle').textContent=title;$('modalBo
 function closeDialog(){stopScanner();$('modalShade').classList.add('hidden')}
 function remove(id){const i=get(id);if(!i)return;dialog('刪除物品',`<p>確定刪除「${safe(i.name)}」？刪除後無法復原。</p>`,[{label:'取消',onClick:closeDialog},{label:'確認刪除',className:'danger',onClick:()=>{stock=stock.filter(x=>x.id!==id);closeDialog();save();nav('inventory');notify('已刪除物品')}}])}
 function change(id,diff){const i=get(id);if(!i)return;i.qty=Math.max(0,Number(i.qty)+diff);save();notify(`${i.name}：目前數量 ${i.qty}`)}
-function addShopping(i){if(!shopping.some(s=>s.name===i.name)&&!low(i)){shopping.push({id:'s'+Date.now()+Math.random().toString(36).slice(2),name:i.name})}save();notify('已加入購物清單');nav('shop')}
-function addManualShop(){const name=$('shopInput').value.trim();if(!name)return notify('請輸入購物項目');if(shopping.some(i=>i.name===name)||stock.some(i=>i.name===name&&low(i)))return notify('此項目已在購物清單');shopping.push({id:'s'+Date.now()+Math.random().toString(36).slice(2),name});$('shopInput').value='';save();notify('已加入購物清單')}
-function sendShop(){const content=['🛒 日日庫存購物清單',...stock.filter(low).map(i=>'☐ '+i.name),...shopping.filter(x=>!stock.some(i=>low(i)&&i.name===x.name)).map(i=>'☐ '+i.name)].join('\n');if(navigator.share){navigator.share({title:'日日庫存購物清單',text:content}).catch(()=>{})}else if(navigator.clipboard?.writeText){navigator.clipboard.writeText(content).then(()=>notify('購物清單已複製')).catch(()=>downloadText(content,'購物清單.txt','text/plain'))}else{downloadText(content,'購物清單.txt','text/plain')}}
+function addShopping(i){if(!shopping.some(s=>s.name===i.name)&&!needsRestock(i)){shopping.push({id:'s'+Date.now()+Math.random().toString(36).slice(2),name:i.name})}save();notify('已加入購物清單');nav('shop')}
+function addManualShop(){const name=$('shopInput').value.trim();if(!name)return notify('請輸入購物項目');if(shopping.some(i=>i.name===name)||stock.some(i=>i.name===name&&needsRestock(i)))return notify('此項目已在購物清單');shopping.push({id:'s'+Date.now()+Math.random().toString(36).slice(2),name});$('shopInput').value='';save();notify('已加入購物清單')}
+function completeRestock(item) {
+  const replaceExpired = expiredFood(item);
+  const instructions = replaceExpired
+    ? '確認後會用新買的數量取代這筆過期庫存。未填寫新到期日會清除舊日期。'
+    : '確認後會把新買的數量加到目前庫存。';
+  const expiryField = replaceExpired
+    ? `<div class="field"><label for="restockExpiry">新到期日（選填）</label><input id="restockExpiry" type="date" min="${shifted(0)}"></div>`
+    : '';
+
+  dialog('完成補貨', `<p>請輸入「${safe(item.name)}」這次買回來的數量。${instructions}</p>
+    <div class="field"><label for="restockQty">補貨數量</label><input id="restockQty" type="number" min="1" step="1" value="1"></div>
+    ${expiryField}`, [
+    { label: '取消', onClick: closeDialog },
+    { label: replaceExpired ? '取代過期庫存' : '更新庫存', className: 'solid', onClick: () => {
+      const quantity = Number($('restockQty').value);
+      if (!Number.isSafeInteger(quantity) || quantity <= 0) {
+        notify('請輸入正整數');
+        return;
+      }
+      if (replaceExpired) {
+        const expiry = $('restockExpiry').value;
+        if (expiry && days(expiry) < 0) {
+          notify('新到期日不可早於今天');
+          return;
+        }
+        item.expiry = expiry;
+      }
+      item.qty = replaceExpired ? quantity : Number(item.qty) + quantity;
+      closeDialog();
+      save();
+      notify('已更新庫存');
+    }}
+  ]);
+}
+
+function sendShop(){const { auto, manual } = shoppingGroups();const content=['🛒 日日庫存購物清單',...[...auto, ...manual].map(i=>'☐ '+i.name)].join('\n');if(navigator.share){navigator.share({title:'日日庫存購物清單',text:content}).catch(()=>{})}else if(navigator.clipboard?.writeText){navigator.clipboard.writeText(content).then(()=>notify('購物清單已複製')).catch(()=>downloadText(content,'購物清單.txt','text/plain'))}else{downloadText(content,'購物清單.txt','text/plain')}}
 function downloadText(content,name,type){const blob=new Blob([content],{type}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000)}
 function exportData(){downloadText(JSON.stringify({version:'wireframe-'+APP_VERSION,stock,shopping,categories:customCategories,locations:customLocations},null,2),'日日庫存-備份.json','application/json');notify('已匯出備份')}
 function stopScanner(){if(scanState){scanState.stop=true;scanState.stream?.getTracks().forEach(t=>t.stop());scanState=null}}
@@ -139,7 +185,7 @@ $('backFromShop').addEventListener('click',()=>{const destination=['home','inven
 $('searchInput').addEventListener('input',render);$('shopInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addManualShop()}});$('addShop').addEventListener('click',addManualShop);$('shareShop').addEventListener('click',sendShop);$('scanBarcode').addEventListener('click',scan);$('exportData').addEventListener('click',exportData);$('importButton').addEventListener('click',()=>$('importFile').click());
 $('importFile').addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;try{const d=JSON.parse(await f.text());if(!Array.isArray(d.stock)||!Array.isArray(d.shopping))throw Error('檔案格式不符合');dialog('匯入庫存備份',`<p>匯入 ${d.stock.length} 筆庫存資料會覆蓋目前資料。確定嗎？</p>`,[{label:'取消',onClick:closeDialog},{label:'確認匯入',className:'solid',onClick:()=>{stock=d.stock.filter(i=>i&&typeof i.name==='string'&&i.name.trim()).map(i=>({...i,id:i.id||'i'+Math.random(),qty:Math.max(0,Number(i.qty)||0),target:Math.max(0,Number(i.target)||0)}));shopping=d.shopping.filter(i=>i&&typeof i.name==='string');customCategories=[...new Set([...(Array.isArray(d.categories)?d.categories:[]),...stock.map(i=>i.category)].filter(c=>typeof c==='string').map(c=>c.trim()).filter(c=>c&&!BASE_CATEGORIES.includes(c)))];customLocations=[...new Set([...(Array.isArray(d.locations)?d.locations:[]),...stock.map(i=>i.location)].filter(c=>typeof c==='string').map(c=>c.trim()).filter(c=>c&&!BASE_LOCATIONS.includes(c)))];updateCategorySelect();updateLocationSelect();closeDialog();save();nav('inventory');notify('匯入完成')}}])}catch(err){notify('無法匯入：'+err.message)}finally{e.target.value=''}});
 $('modalShade').addEventListener('click',e=>{if(e.target===$('modalShade'))closeDialog()});document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDialog()});
-document.addEventListener('click',e=>{const b=e.target.closest('[data-nav],[data-view],[data-filter],[data-action]');if(!b)return;const {nav:n,view,filter:f,action,id}=b.dataset;if(n){if(n==='inventory')statusFilter='';nav(n);return}if(view){if(view==='inventory')statusFilter='';nav(view);return}if(f){filter=f;render();return}const i=get(id);switch(action){case 'soon':statusFilter='expiry';filter='全部';$('searchInput').value='';$('locationFilter').value='全部';nav('inventory');break;case 'clear-status-filter':statusFilter='';render();break;case 'favorite':if(i){i.favorite=!i.favorite;save()}break;case 'minus':change(id,-1);break;case 'plus':change(id,1);break;case 'detail':selected=id;detailReturnPage=page;nav('detail');break;case 'edit':edit(id);break;case 'delete':remove(id);break;case 'shop-item':if(i)addShopping(i);break;case 'shop-remove':shopping=shopping.filter(s=>String(s.id)!==String(id));save();notify('已移除購物項目');break;case 'shop-done':if(b.dataset.auto==='true'){if(i){dialog('完成補貨',`<p>請輸入「${safe(i.name)}」這次買回來的數量。</p><div class="field"><label for="restockQty">補貨數量</label><input id="restockQty" type="number" min="1" step="1" value="1"></div>`,[{label:'取消',onClick:closeDialog},{label:'更新庫存',className:'solid',onClick:()=>{const v=Number($('restockQty').value);if(!Number.isSafeInteger(v)||v<=0){notify('請輸入正整數');return}i.qty+=v;closeDialog();save();notify('已更新庫存')}}])}}else{shopping=shopping.filter(s=>String(s.id)!==String(id));save();notify('購物項目已完成')}break;}}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-nav],[data-view],[data-filter],[data-action]');if(!b)return;const {nav:n,view,filter:f,action,id}=b.dataset;if(n){if(n==='inventory')statusFilter='';nav(n);return}if(view){if(view==='inventory')statusFilter='';nav(view);return}if(f){filter=f;render();return}const i=get(id);switch(action){case 'soon':statusFilter='expiry';filter='全部';$('searchInput').value='';$('locationFilter').value='全部';nav('inventory');break;case 'clear-status-filter':statusFilter='';render();break;case 'favorite':if(i){i.favorite=!i.favorite;save()}break;case 'minus':change(id,-1);break;case 'plus':change(id,1);break;case 'detail':selected=id;detailReturnPage=page;nav('detail');break;case 'edit':edit(id);break;case 'delete':remove(id);break;case 'shop-item':if(i)addShopping(i);break;case 'shop-remove':shopping=shopping.filter(s=>String(s.id)!==String(id));save();notify('已移除購物項目');break;case 'shop-done':if(b.dataset.auto==='true'){if(i)completeRestock(i)}else{shopping=shopping.filter(s=>String(s.id)!==String(id));save();notify('購物項目已完成')}break;}}
 );
 render();
 })();
