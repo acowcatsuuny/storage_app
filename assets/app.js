@@ -78,14 +78,19 @@ function createLocation(){
 let page='home',filter='全部',statusFilter='',selected=null,editId=null,formPhoto='',toastHandle=null,scanState=null,lastPage='inventory',detailReturnPage='inventory',emojiTouched=false;
 function suggestEmoji(){if(!emojiTouched)setEmoji(defaultEmoji($('itemCategory').value,$('itemName').value.trim()))}
 function notify(msg){$('toast').textContent=msg;$('toast').classList.remove('hidden');clearTimeout(toastHandle);toastHandle=setTimeout(()=>$('toast').classList.add('hidden'),2700)}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(stock));localStorage.setItem(SHOP_KEY,JSON.stringify(shopping));localStorage.setItem(CAT_KEY,JSON.stringify(customCategories));localStorage.setItem(LOC_KEY,JSON.stringify(customLocations))}catch{notify('儲存空間不足，請先匯出備份或移除圖片')}render()}
+function save(){
+  for (const item of stock) {
+    if (item.shopDismissed && !needsRestock(item)) delete item.shopDismissed;
+  }
+  try{localStorage.setItem(KEY,JSON.stringify(stock));localStorage.setItem(SHOP_KEY,JSON.stringify(shopping));localStorage.setItem(CAT_KEY,JSON.stringify(customCategories));localStorage.setItem(LOC_KEY,JSON.stringify(customLocations))}catch{notify('儲存空間不足，請先匯出備份或移除圖片')}render()}
 function days(date){if(!date)return Infinity;const [y,m,d]=date.split('-').map(Number),t=new Date();return Math.round((new Date(y,m-1,d)-new Date(t.getFullYear(),t.getMonth(),t.getDate()))/86400000)}
 const low=i=>Number(i.qty)<=Number(i.target),near=i=>days(i.expiry)<=7;
 const expiredFood = item => item.category === '食品飲料' && days(item.expiry) < 0;
 const needsRestock = item => low(item) || expiredFood(item);
+const inAutoShopping = item => needsRestock(item) && item.shopDismissed !== true;
 
 function shoppingGroups() {
-  const auto = stock.filter(needsRestock);
+  const auto = stock.filter(inAutoShopping);
   const manual = shopping.filter(item => !auto.some(entry => entry.name === item.name));
   return { auto, manual };
 }
@@ -95,7 +100,7 @@ function get(id){return stock.find(i=>String(i.id)===String(id))}
 function nav(destination){if(destination==='add'){editId=null;resetForm()}if(destination==='detail'&&!get(selected)){destination='inventory'}if(destination==='shop'&&page!=='shop')lastPage=page;page=destination;if(destination==='shop'){$('backFromShop').textContent='← 返回'+({home:'首頁',inventory:'庫存清單',detail:'物品資訊',backup:'資料備份'}[lastPage]||'首頁')};document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('show',s.id===destination+'Screen'));document.querySelectorAll('[data-nav]').forEach(b=>b.classList.toggle('active',b.dataset.nav===destination));const titles={home:['重要物品','常用與即將需要補貨的物品，一眼掌握。'],inventory:['庫存清單','你擁有的日用品與剩餘數量。'],detail:['物品資訊','查看商品細節、更新數量與期限。'],add:[editId?'編輯物品':'新增物品','新增庫存資訊，從此不再忘記。'],shop:['購物清單','低庫存自動提醒，補貨更有效率。'],backup:['資料備份','保留資料，換裝置也能延續使用。']};$('pageTitle').textContent=titles[destination][0];$('pageSubtitle').textContent=titles[destination][1];render();window.scrollTo({top:0,behavior:'instant'})}
 function row(i){const st=status(i);return `<article class="item ${Number(i.qty)===0?'is-out':low(i)?'is-low':''}"><div class="item-upper"><button class="favorite ${i.favorite?'on':''}" title="${i.favorite?'取消重要物品':'標為重要物品'}" aria-label="${i.favorite?'取消重要物品':'標為重要物品'}：${safe(i.name)}" data-action="favorite" data-id="${safe(i.id)}">${i.favorite?'★':'☆'}</button><div class="item-name"><div class="item-title">${emojiHtml(i)}${safe(i.name)}</div><div class="item-sub">${safe(i.category)} · ${safe(i.location||'未設定位置')}</div></div><button class="small-btn" data-action="detail" data-id="${safe(i.id)}">物品資訊 ›</button></div><div class="item-bottom"><span class="status ${st[1]}">${st[0]}${near(i)?' · '+(days(i.expiry)<0?'過期':'剩 '+days(i.expiry)+' 天'):''}</span><div class="qty-controls"><button data-action="minus" data-id="${safe(i.id)}" aria-label="減少 ${safe(i.name)} 數量" ${Number(i.qty)<=0?'disabled':''}>−</button><span>${Number(i.qty)}</span><button data-action="plus" data-id="${safe(i.id)}" aria-label="增加 ${safe(i.name)} 數量">＋</button></div></div><div class="link-row"><button class="small-btn" data-action="shop-item" data-id="${safe(i.id)}">＋ 加入購物清單</button></div></article>`}
 function render(){
-$('totalCount').textContent=stock.length;$('lowCount').textContent=stock.filter(needsRestock).length;$('soonCount').textContent=stock.filter(near).length;
+$('totalCount').textContent=stock.length;$('lowCount').textContent=stock.filter(inAutoShopping).length;$('soonCount').textContent=stock.filter(near).length;
 const favorites=stock.filter(i=>i.favorite);$('favoriteItems').innerHTML=favorites.length?favorites.map(row).join(''):'<div class="empty"><div class="visual">☆</div>尚未標記重要物品。<br>到庫存清單點星號即可加入。</div>';
 updateLocationFilter();const cats=['全部',...allCategories()];$('categoryFilters').innerHTML=cats.map(c=>`<button class="chip ${c===filter?'current':''}" data-filter="${c}">${c}</button>`).join('');const q=$('searchInput').value.trim().toLowerCase();let locFilter=$('locationFilter').value;let filtered=stock.filter(i=>(filter==='全部'||i.category===filter)&&(locFilter==='全部'||(locFilter==='未設定'?!i.location:i.location===locFilter))&&(!statusFilter||(statusFilter==='expiry'&&near(i)))&&[i.name,i.location,i.barcode].join(' ').toLowerCase().includes(q));$('statusFilterBadge').innerHTML=statusFilter==='expiry'?'<button class="chip current status-filter-badge" data-action="clear-status-filter">到期提醒 ✕</button>':'';$('inventoryItems').innerHTML=filtered.length?filtered.map(row).join(''):'<div class="empty"><div class="visual">📦</div>目前沒有符合條件的物品。</div>';
 if(page==='detail'){const i=get(selected);if(i)detail(i)}
@@ -118,7 +123,7 @@ function shopRow(name, auto, id, url, quantity, reason) {
     <button style="font-size:20px" data-action="shop-done" data-id="${safe(id)}" data-auto="${auto}" aria-label="完成購買 ${safe(name)}">☐</button>
     <div class="fill"><div class="buy-name">${safe(name)}</div><div class="detail-sub">${reason}</div><div class="shop-quantity">${quantityLabel}</div></div>
     <a href="${safe(link)}" target="_blank" rel="noopener noreferrer">搜尋購買 ↗</a>
-    ${auto?'':`<button class="small-btn alert" data-action="shop-remove" data-id="${safe(id)}">移除</button>`}
+    <button class="small-btn alert" type="button" data-action="shop-remove" data-id="${safe(id)}" data-auto="${auto}" aria-label="從購物清單移除 ${safe(name)}">移除</button>
   </div>`;
 }
 const HISTORY_LABELS = { use: '使用', restock: '補貨', replace: '補貨（取代過期庫存）', adjust: '庫存校正' };
@@ -180,8 +185,29 @@ function change(id, diff) {
   save();
   notify(`${item.name}：目前數量 ${item.qty}`);
 }
-function addShopping(i){if(!shopping.some(s=>s.name===i.name)&&!needsRestock(i)){shopping.push({id:'s'+Date.now()+Math.random().toString(36).slice(2),name:i.name})}save();notify('已加入購物清單');nav('shop')}
-function addManualShop(){const name=$('shopInput').value.trim();if(!name)return notify('請輸入購物項目');if(shopping.some(i=>i.name===name)||stock.some(i=>i.name===name&&needsRestock(i)))return notify('此項目已在購物清單');shopping.push({id:'s'+Date.now()+Math.random().toString(36).slice(2),name});$('shopInput').value='';save();notify('已加入購物清單')}
+function addShopping(item) {
+  delete item.shopDismissed;
+  if (!needsRestock(item) && !shopping.some(entry => entry.name === item.name)) {
+    shopping.push({ id: 's' + Date.now() + Math.random().toString(36).slice(2), name: item.name });
+  }
+  save();
+  notify('已加入購物清單');
+  nav('shop');
+}
+
+function removeShopping(id, auto) {
+  if (auto) {
+    const item = get(id);
+    if (!item) return;
+    item.shopDismissed = true;
+  } else {
+    shopping = shopping.filter(entry => String(entry.id) !== String(id));
+  }
+  save();
+  notify('已移出購物清單');
+}
+
+function addManualShop(){const name=$('shopInput').value.trim();if(!name)return notify('請輸入購物項目');if(shopping.some(i=>i.name===name)||stock.some(i=>i.name===name&&inAutoShopping(i)))return notify('此項目已在購物清單');shopping.push({id:'s'+Date.now()+Math.random().toString(36).slice(2),name});$('shopInput').value='';save();notify('已加入購物清單')}
 function completeRestock(item) {
   const replaceExpired = expiredFood(item);
   const instructions = replaceExpired
@@ -236,6 +262,7 @@ $('itemReceipt').addEventListener('change',e=>{const f=e.target.files?.[0];$('re
 $('itemForm').addEventListener('submit',e=>{e.preventDefault();const name=$('itemName').value.trim(),qty=Number($('itemQty').value),target=Number($('itemTarget').value);if(!name||!Number.isSafeInteger(qty)||qty<0||!Number.isSafeInteger(target)||target<0){notify('請填寫有效名稱與整數數量');return}const i={id:editId||'i'+Date.now()+Math.random().toString(36).slice(2),name,emoji:$('itemEmoji').value.trim(),qty,target,category:$('itemCategory').value,location:$('itemLocation').value.trim(),expiry:$('itemExpiry').value,price:$('itemPrice').value.trim(),barcode:$('itemBarcode').value.trim(),url:$('itemShopUrl').value.trim(),favorite:$('itemFavorite').checked,photo:formPhoto};if (editId) {
   const previous = get(editId);
   if (Array.isArray(previous?.history)) i.history = previous.history;
+  if (previous?.shopDismissed === true) i.shopDismissed = true;
   if (previous && Number(previous.qty) !== qty) recordQuantity(i, 'adjust', Number(previous.qty));
   stock = stock.map(item => item.id === editId ? i : item);
 } else {
@@ -246,7 +273,7 @@ $('backFromShop').addEventListener('click',()=>{const destination=['home','inven
 $('searchInput').addEventListener('input',render);$('shopInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addManualShop()}});$('addShop').addEventListener('click',addManualShop);$('shareShop').addEventListener('click',sendShop);$('scanBarcode').addEventListener('click',scan);$('exportData').addEventListener('click',exportData);$('importButton').addEventListener('click',()=>$('importFile').click());
 $('importFile').addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;try{const d=JSON.parse(await f.text());if(!Array.isArray(d.stock)||!Array.isArray(d.shopping))throw Error('檔案格式不符合');dialog('匯入庫存備份',`<p>匯入 ${d.stock.length} 筆庫存資料會覆蓋目前資料。確定嗎？</p>`,[{label:'取消',onClick:closeDialog},{label:'確認匯入',className:'solid',onClick:()=>{stock=d.stock.filter(i=>i&&typeof i.name==='string'&&i.name.trim()).map(i=>({...i,id:i.id||'i'+Math.random(),qty:Math.max(0,Number(i.qty)||0),target:Math.max(0,Number(i.target)||0)}));shopping=d.shopping.filter(i=>i&&typeof i.name==='string');customCategories=[...new Set([...(Array.isArray(d.categories)?d.categories:[]),...stock.map(i=>i.category)].filter(c=>typeof c==='string').map(c=>c.trim()).filter(c=>c&&!BASE_CATEGORIES.includes(c)))];customLocations=[...new Set([...(Array.isArray(d.locations)?d.locations:[]),...stock.map(i=>i.location)].filter(c=>typeof c==='string').map(c=>c.trim()).filter(c=>c&&!BASE_LOCATIONS.includes(c)))];updateCategorySelect();updateLocationSelect();closeDialog();save();nav('inventory');notify('匯入完成')}}])}catch(err){notify('無法匯入：'+err.message)}finally{e.target.value=''}});
 $('modalShade').addEventListener('click',e=>{if(e.target===$('modalShade'))closeDialog()});document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDialog()});
-document.addEventListener('click',e=>{const b=e.target.closest('[data-nav],[data-view],[data-filter],[data-action]');if(!b)return;const {nav:n,view,filter:f,action,id}=b.dataset;if(n){if(n==='inventory')statusFilter='';nav(n);return}if(view){if(view==='inventory')statusFilter='';nav(view);return}if(f){filter=f;render();return}const i=get(id);switch(action){case 'soon':statusFilter='expiry';filter='全部';$('searchInput').value='';$('locationFilter').value='全部';nav('inventory');break;case 'clear-status-filter':statusFilter='';render();break;case 'favorite':if(i){i.favorite=!i.favorite;save()}break;case 'minus':change(id,-1);break;case 'plus':change(id,1);break;case 'detail':selected=id;detailReturnPage=page;nav('detail');break;case 'edit':edit(id);break;case 'delete':remove(id);break;case 'shop-item':if(i)addShopping(i);break;case 'shop-remove':shopping=shopping.filter(s=>String(s.id)!==String(id));save();notify('已移除購物項目');break;case 'shop-done':if(b.dataset.auto==='true'){if(i)completeRestock(i)}else{shopping=shopping.filter(s=>String(s.id)!==String(id));save();notify('購物項目已完成')}break;}}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-nav],[data-view],[data-filter],[data-action]');if(!b)return;const {nav:n,view,filter:f,action,id}=b.dataset;if(n){if(n==='inventory')statusFilter='';nav(n);return}if(view){if(view==='inventory')statusFilter='';nav(view);return}if(f){filter=f;render();return}const i=get(id);switch(action){case 'soon':statusFilter='expiry';filter='全部';$('searchInput').value='';$('locationFilter').value='全部';nav('inventory');break;case 'clear-status-filter':statusFilter='';render();break;case 'favorite':if(i){i.favorite=!i.favorite;save()}break;case 'minus':change(id,-1);break;case 'plus':change(id,1);break;case 'detail':selected=id;detailReturnPage=page;nav('detail');break;case 'edit':edit(id);break;case 'delete':remove(id);break;case 'shop-item':if(i)addShopping(i);break;case 'shop-remove':removeShopping(id,b.dataset.auto==='true');break;case 'shop-done':if(b.dataset.auto==='true'){if(i)completeRestock(i)}else{shopping=shopping.filter(s=>String(s.id)!==String(id));save();notify('購物項目已完成')}break;}}
 );
 render();
 })();
